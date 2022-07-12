@@ -1,0 +1,16 @@
+bin/
+/build*
+.cache
+.idea/
+.project
+.settings/
+.vs
+.vscode
+/cmake-*
+*.pcd
+*.ply
+data/
+Make*/
+cmake-build-debug/
+snapshot/*.json
+snapshot/*vis
