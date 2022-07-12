@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
 project(VTR)
-
 set(CMAKE_CXX_STANDARD 20)
 
 ##################################### system #####################################
@@ -9,7 +8,7 @@ IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
     set(platform "linux")
 ELSEIF (CMAKE_SYSTEM_NAME MATCHES "Windows")
     MESSAGE(STATUS "current platform: Windows")
-    set(platform "windows")
+    set(platform "Windows")
 ELSEIF (CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
     MESSAGE(STATUS "current platform: FreeBSD")
 ELSE ()
@@ -22,17 +21,28 @@ include_directories(${PROJECT_SOURCE_DIR}/include/)
 
 ##################################### json #####################################
 #set(nlohmann_json_DIR /home/cheng/sources/json)
+if(${platform} STREQUAL "Windows")
+    MESSAGE(STATUS "current platform: Windows")
+    set(nlohmann_json_DIR D:/source/json/build)
+endif()
 find_package(nlohmann_json REQUIRED)
 
 ##################################### Eigen #####################################
-include_directories("/usr/include/eigen3")
-find_package(Eigen3 REQUIRED)
+if(${platform} STREQUAL "linux")
+    include_directories("/usr/include/eigen3")
+elseif(${platform} STREQUAL "Windows")
+    include_directories("D:/source/eigen-3.4.0/Eigen")
+endif()
+#find_package(Eigen3 REQUIRED)
 include_directories(${Eigen3_INCLUDE_DIRS})
 
 ##################################### open3d #####################################
-#set(Open3D_DIR /home/cheng_chen/source/open3d13/install_server/lib/cmake/Open3D)
-#set(Open3D_DIR /home/cheng/sources/open3d13/install_release/lib/cmake/Open3D)
-set(Open3D_DIR /home/cheng/.local/lib/cmake/Open3D)
+if(${platform} STREQUAL "linux")
+    set(Open3D_DIR /home/cheng/.local/lib/cmake/Open3D)
+elseif(${platform} STREQUAL "Windows")
+    set(Open3D_DIR D:/source/Open3D/install/open3d-debug/CMake)
+endif()
+
 find_package(Open3D REQUIRED)
 link_directories(${Open3D_LIBRARY_DIRS})
 include_directories(${Open3D_INCLUDE_DIRS})
