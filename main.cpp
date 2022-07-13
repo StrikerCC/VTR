@@ -3,11 +3,8 @@
 #include <chrono>
 #include <iostream>
 #include <fstream>
-#include "open3d/Open3D.h"
-//#include "open3d/geometry/PointCloud.h"
-//#include "open3d/geometry/Image.h"
-//#include "open3d/io/ImageIO.h"
 
+#include "open3d/Open3D.h"
 #include "nlohmann/json.hpp"
 
 std::shared_ptr<open3d::geometry::PointCloud> CreatePointCloud(const std::string& file_path_cam_setting,
@@ -31,9 +28,6 @@ std::shared_ptr<open3d::geometry::PointCloud> CreatePointCloud(const std::string
             extrinsic(i, j) = (double) para_cam["extrinsic"][i][j];
         }
     }
-//    for (int i = 0; i < 3; i++) {
-//        extrinsic(i, 3) = (double) para_cam["trans"][i];
-//    }
 
     /*
      * image reading
