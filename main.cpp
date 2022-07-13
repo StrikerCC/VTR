@@ -46,48 +46,61 @@ std::shared_ptr<open3d::geometry::PointCloud> CreatePointCloud(const std::string
     /*
      * vis, log, and cout
      */
-    std::cout << "camera intrinsic " << intrinsic.ToString() << std::endl;
-    std::cout << "point cloud has " << pc->points_.size() << " from " << img_rgb.width_ * img_rgb.height_ << " pixels" << std::endl;
+//    std::cout << "camera intrinsic " << intrinsic.ToString() << std::endl;
+//    std::cout << "point cloud has " << pc->points_.size() << " from " << img_rgb.width_ * img_rgb.height_ << " pixels" << std::endl;
     return pc;
 }
 
 int main() {
     std::cout << "Hello, World!" << std::endl;
 
-    bool vis_debug = false;
+    bool vis_debug = true;
 
-    /// hardware setting
-    int num_camera = 3;
+    for (int i_testing_iter = 0; i_testing_iter < 100; i_testing_iter++) {
+        /// hardware setting
+        int num_camera = 3;
 
-    auto time_start = std::chrono::high_resolution_clock::now();
-    std::cout << "Reading camera parameters and images" << std::endl;
-    std::cout << "Pwd " << std::filesystem::current_path() << std::endl;
+        auto xyz_min_c_arm_working_space = std::make_shared<Eigen::Vector3d>(200, -2000, 250);
+        auto xyz_max_c_arm_working_space = std::make_shared<Eigen::Vector3d>(5000, 2000, 2500);
+        auto bbox_c_arm_working_space = std::make_shared<open3d::geometry::AxisAlignedBoundingBox>(
+                *xyz_min_c_arm_working_space, *xyz_max_c_arm_working_space);
+        bbox_c_arm_working_space->color_ = Eigen::Vector3d();
+        auto frame = open3d::geometry::TriangleMesh::CreateCoordinateFrame(1000);
 
-    // create point cloud from triple camera
-    std::vector<std::shared_ptr<open3d::geometry::PointCloud>> pcs;
-    open3d::geometry::PointCloud pc_combined;
-    for (int i = 0; i < num_camera; i++) {
-        auto pc = CreatePointCloud("../data/2/cam_para_" + std::to_string(i) + ".json",
-                                     "../data/2/camera" + std::to_string(i) + "_RGB.png",
-                                     "../data/2/camera" + std::to_string(i) + "_Depth.png");
-        pc_combined += *pc;
-        if (vis_debug) open3d::visualization::DrawGeometries({pc});
+        auto time_start = std::chrono::high_resolution_clock::now();
+//    std::cout << "Reading camera parameters and images" << std::endl;
+//    std::cout << "Pwd " << std::filesystem::current_path() << std::endl;
+
+        // create point cloud from triple camera
+        std::vector<std::shared_ptr<open3d::geometry::PointCloud>> pcs;
+        open3d::geometry::PointCloud pc_combined;
+        for (int i = 0; i < num_camera; i++) {
+            auto pc = CreatePointCloud("../data/2/cam_para_" + std::to_string(i) + ".json",
+                                       "../data/2/camera" + std::to_string(i) + "_RGB.png",
+                                       "../data/2/camera" + std::to_string(i) + "_Depth.png");
+            pc_combined += *pc;
+            if (vis_debug) open3d::visualization::DrawGeometries({frame, bbox_c_arm_working_space, pc});
 //        open3d::visualization::DrawGeometries({pcs[i]});
+        }
+
+        // merge three point cloud
+        if (vis_debug)
+            open3d::visualization::DrawGeometries({std::make_shared<open3d::geometry::PointCloud>(pc_combined), frame});
+
+        float dur_build_point_cloud = (float) std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - time_start).count();
+        std::cout << "Point cloud built in " << dur_build_point_cloud << " milliseconds" << std::endl;
+
+        time_start = std::chrono::high_resolution_clock::now();
+
+        // build voxel from point cloud
+        int voxel_size = 10;
+        auto voxel_room = open3d::geometry::VoxelGrid::CreateFromPointCloud(
+                *pc_combined.Crop(*bbox_c_arm_working_space), voxel_size);
+        if (vis_debug) open3d::visualization::DrawGeometries({frame, bbox_c_arm_working_space, voxel_room});
+        auto dur_build_voxel_grid = (float) std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - time_start).count();
+        std::cout << "Point cloud built in " << dur_build_voxel_grid << " milliseconds" << std::endl;
     }
-
-    // merge three point cloud
-    auto frame = open3d::geometry::TriangleMesh::CreateCoordinateFrame(1000);
-    if (vis_debug) open3d::visualization::DrawGeometries({std::make_shared<open3d::geometry::PointCloud>(pc_combined), frame});
-
-    float dur_build_point_cloud = (float) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - time_start).count();
-    std::cout << "Point cloud built in " << dur_build_point_cloud << " milliseconds" << std::endl;
-
-    time_start = std::chrono::high_resolution_clock::now();
-    // build voxel from point cloud
-    auto voxel_room = open3d::geometry::VoxelGrid::CreateFromPointCloud(pc_combined, 20);
-    if (vis_debug) open3d::visualization::DrawGeometries({voxel_room, frame});
-    auto dur_build_voxel_grid = (float) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - time_start).count();
-    std::cout << "Point cloud built in " << dur_build_voxel_grid << " milliseconds" << std::endl;
-
     return 0;
 }
