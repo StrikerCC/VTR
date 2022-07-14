@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 project(VTR)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 
 ##################################### system #####################################
 IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -23,9 +23,16 @@ include_directories(${PROJECT_SOURCE_DIR}/include/)
 #set(nlohmann_json_DIR /home/cheng/sources/json)
 if(${platform} STREQUAL "Windows")
     MESSAGE(STATUS "current platform: Windows")
-    set(nlohmann_json_DIR D:/source/json/build)
+    set(nlohmann_json_DIR D:/source/json/install/lib/cmake/nlohmann_json)
 endif()
 find_package(nlohmann_json REQUIRED)
+include_directories(${nlohmann_json_INCLUDE_DIRS})
+link_directories(${nlohmann_json_LIBRARY_DIRS})
+if (nlohmann_json_FOUND)
+    message(STATUS "Found nlohmann_json ${nlohmann_json_VERSION}")
+    message(STATUS "nlohmann_json installed to: ${nlohmann_json_LIBRARY_DIRS}")
+endif()
+
 
 ##################################### Eigen #####################################
 if(${platform} STREQUAL "linux")
@@ -40,7 +47,7 @@ include_directories(${Eigen3_INCLUDE_DIRS})
 if(${platform} STREQUAL "linux")
     set(Open3D_DIR /home/cheng/.local/lib/cmake/Open3D)
 elseif(${platform} STREQUAL "Windows")
-    set(Open3D_DIR D:/source/Open3D/install/open3d-debug/CMake)
+    set(Open3D_DIR D:/source/Open3D/install/open3d-release/CMake)
 endif()
 
 find_package(Open3D REQUIRED)
@@ -54,7 +61,22 @@ endif()
 add_executable(VTR main.cpp)
 
 ##################################### output bin #####################################
-SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+# SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR})
 
-target_link_libraries(VTR PUBLIC ${Open3D_LIBRARIES})
 target_link_libraries(VTR PRIVATE nlohmann_json::nlohmann_json)
+
+if (${platform} STREQUAL "linux")
+    target_link_libraries(VTR PUBLIC ${Open3D_LIBRARIES})
+elseif (${platform} STREQUAL "Windows")
+    target_link_libraries(VTR PRIVATE Open3D::Open3D)
+    get_target_property(open3d_type Open3D::Open3D TYPE)
+    if(open3d_type STREQUAL "SHARED_LIBRARY")
+        message(STATUS "Copying Open3D.dll to ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+        add_custom_command(TARGET VTR POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy
+                                #    ${CMAKE_INSTALL_PREFIX}/bin/Open3D.dll
+                                ${Open3D_DIR}/../bin/Open3D.dll   
+                                ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>)
+    endif()
+endif()
+
