@@ -8,133 +8,155 @@
 #include "open3d/Open3D.h"
 #include "nlohmann/json.hpp"
 #include "Eigen/Eigen"
+#include "Eigen/Geometry"
 
-std::shared_ptr<open3d::geometry::PointCloud> CreatePointCloud(const std::string& file_path_cam_setting,
-                                                               const std::string& file_path_rgb_img,
-                                                               const std::string& file_path_depth_img) {
-    open3d::geometry::Image img_rgb, img_depth;
-    open3d::camera::PinholeCameraIntrinsic intrinsic;
-    Eigen::Matrix4d extrinsic = Eigen::Matrix4d::Identity();
+#include "Cam.h"
 
-    /*
-     * camera parameter
-     */
-    std::ifstream file_json (file_path_cam_setting);
-    nlohmann::json para_cam;
-    file_json >> para_cam;
-    intrinsic.SetIntrinsics(para_cam["resolution"][0], para_cam["resolution"][1],
-                            para_cam["intrinsic"][0][0], para_cam["intrinsic"][1][1],
-                            para_cam["intrinsic"][0][2], para_cam["intrinsic"][1][2]);
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            extrinsic(i, j) = (double) para_cam["extrinsic"][i][j];
-        }
-    }
+std::shared_ptr<open3d::geometry::RGBDImage> ReadRGBD(const std::string& file_path_cam_setting,
+                                                      const std::string& file_path_rgb_img,
+                                                      const std::string& file_path_depth_img);
 
-    /*
-     * image reading
-     */
-    open3d::io::ReadImage(file_path_rgb_img, img_rgb);
-    open3d::io::ReadImage(file_path_depth_img, img_depth);
-    auto img_rgbd = open3d::geometry::RGBDImage::CreateFromColorAndDepth(img_rgb, img_depth, 1, 12000);
-    auto pc = open3d::geometry::PointCloud::CreateFromRGBDImage(*img_rgbd, intrinsic, extrinsic);
 
-    /*
-     * vis, log, and cout
-     */
-    // std::cout << "camera intrinsic " << intrinsic.ToString() << std::endl;
-    // std::cout << "point cloud has " << pc->points_.size() << " from " << img_rgb.width_ * img_rgb.height_ << " pixels" << std::endl;
-    return pc;
-}
+std::vector<std::shared_ptr<Eigen::Transform<double, 3, 0x1>>> ReadTfFromFile(const std::string& file_path_motion);
 
 int main() {
     std::cout << "Hello, World!" << std::endl;
-    /*
-    * hardware setting
-    */
-    // camera
-    int num_camera = 3;
 
-    // c_arm
-    auto xyz_min = std::make_shared<Eigen::Vector3d> (800, -1000, 200);
-    auto xyz_max = std::make_shared<Eigen::Vector3d> (4500, 1000, 2500);
-    auto mesh_bound = std::make_shared<open3d::geometry::AxisAlignedBoundingBox> (*xyz_min, *xyz_max);
-    std::string file_path_c_arm_cad_model = "";
-//    auto xyz_min = std::make_shared<Eigen::Vector3d> (0, 0, 0);
-//    auto xyz_max = std::make_shared<Eigen::Vector3d> (1000, 1000, 1000);
+    bool flag_output_debug = true;
+    bool flag_vis_debug = true;
 
+    /// parameter setting
     int voxel_size = 20;
 
-    // testing setting
-    float cost_avg_build_pc = 0.0, cost_avg_build_voxel = 0.0;
+    /// data reading
+    int num_camera = 3;
+    auto file_paths_camera_parameter = std::make_shared<std::vector<std::string>> ();
+    auto file_paths_camera_rgb = std::make_shared<std::vector<std::string>> ();
+    auto file_paths_camera_depth = std::make_shared<std::vector<std::string>> ();
+    auto file_path_c_arm_motion = std::make_shared<std::string> ("");
+
+    std::cout << "Pwd " << std::filesystem::current_path() << std::endl;
+    for (int i_cam = 0; i_cam < num_camera; i_cam++) {
+        file_paths_camera_parameter->push_back("../../data/2/cam_para_" + std::to_string(i_cam) + ".json");
+        file_paths_camera_rgb->push_back("../../data/2/camera" + std::to_string(i_cam) + "_RGB.png");
+        file_paths_camera_depth->push_back("../../data/2/camera" + std::to_string(i_cam) + "_Depth.png");
+    }
+
+    /// hardware setting
+    // camera
+    std::vector<std::shared_ptr<Cam>> cam_models;
+    std::vector<std::shared_ptr<open3d::geometry::RGBDImage>> rgbds;
+    for (int i_cam = 0; i_cam < num_camera; i_cam++) {
+        auto cam = std::make_shared<Cam>();
+        cam->SetCamParaFromFile(file_paths_camera_parameter->at(i_cam));
+        cam_models.push_back(cam);
+        auto rgbd = ReadRGBD(file_paths_camera_parameter->at(i_cam), file_paths_camera_rgb->at(i_cam), file_paths_camera_depth->at(i_cam));
+        rgbds.push_back(rgbd);
+//        if (flag_output_debug) {
+//            std::cout << "camera intrinsic " << cam->intrinsic.ToString() << std::endl;
+//            std::cout << "camera extrinsic " << cam->extrinsic << std::endl;
+//        }
+//        if (flag_vis_debug) open3d::visualization::DrawGeometries({rgbd});
+    }
+
+    // c_arm
+    std::vector<std::string> file_path_c_arm_cad_model = {"../../data/model/c_arm_model/vertical.ply", "../../data/model/c_arm_model/horizontal.ply"};
+    auto xyz_min_c_arm_workspace = std::make_shared<Eigen::Vector3d> (800, -1000, 200);
+    auto xyz_max_c_arm_workspace = std::make_shared<Eigen::Vector3d> (4500, 1000, 2500);
+    auto bbox_c_arm_workspace = std::make_shared<open3d::geometry::AxisAlignedBoundingBox> (*xyz_min_c_arm_workspace, *xyz_max_c_arm_workspace);
+//    auto mesh_c_arm = std::make_shared<open3d::geometry::TriangleMesh> ();  // mesh from c_arm CAD model
+//    open3d::io::ReadTriangleMesh(file_path_c_arm_cad_model.at(0), *mesh_c_arm, open3d::io::ReadTriangleMeshOptions());
+
+    auto mesh_c_arm = std::make_shared<open3d::geometry::PointCloud> ();  // mesh from c_arm CAD model
+    open3d::io::ReadPointCloud(file_path_c_arm_cad_model.at(0), *mesh_c_arm);
+
+//    auto voxel_c_arm = open3d::geometry::VoxelGrid::CreateFromTriangleMesh(*mesh_c_arm, voxel_size);
+    auto voxel_c_arm = open3d::geometry::VoxelGrid::CreateFromPointCloud(*mesh_c_arm, voxel_size);
+    auto c_arm_motions = ReadTfFromFile("");
+
+    /// visualization
+    auto mesh_frame = flag_vis_debug ? std::make_shared<open3d::geometry::TriangleMesh> ()->CreateCoordinateFrame(1000) : nullptr;
+    if (bbox_c_arm_workspace && flag_vis_debug) bbox_c_arm_workspace->color_ = Eigen::Vector3d();
+
+    auto mesh_c_arm_world = std::make_shared<open3d::geometry::PointCloud>(*mesh_c_arm);
+    mesh_c_arm_world->Transform(Eigen::Matrix4d({{0, 0, 1, -361}, {1, 0, 0, -400}, {0, 1, 0, 150}, {0, 0, 0, 1}}));     // transform c_arm to world frame
+    if (flag_vis_debug) open3d::visualization::DrawGeometries({mesh_frame, bbox_c_arm_workspace, mesh_c_arm, mesh_c_arm_world}, "c_arm from ply file");
+
+    /// statistics
+    float cost_avg_build_pc, cost_avg_build_voxel;
     int nLoop = 100;
 
-    // debug output
-    bool flag_output_debug = false;
-
-    // debug visualization
-    bool flag_vis_debug = false;
-    auto mesh_frame = flag_vis_debug ? std::make_shared<open3d::geometry::TriangleMesh> ()->CreateCoordinateFrame(1000) : nullptr;
-    if (mesh_bound && flag_vis_debug) mesh_bound->color_ = Eigen::Vector3d();
-
-    /*
-     * testing loop
-     */
+    /// testing
     for (int i_iter = 0; i_iter < nLoop; i_iter++) {
-        
-        /*
-         * point cloud and mesh
-         */
-        if (flag_output_debug) {
-            std::cout << "Reading camera parameters and images" << std::endl;
-            std::cout << "Pwd " << std::filesystem::current_path() << std::endl;
-        }
-
-        // point cloud from camera
+        /// read point cloud from camera
         auto time_start = std::chrono::high_resolution_clock::now();
         std::vector<std::shared_ptr<open3d::geometry::PointCloud>> pcs;     // point cloud array from triple camera
         auto pc_combined = std::make_shared<open3d::geometry::PointCloud> ();   // point cloud merge from all cameras
 
         for (int i_cam = 0; i_cam < num_camera; i_cam++) {
-            auto pc = CreatePointCloud("../../data/2/cam_para_" + std::to_string(i_cam) + ".json",
-                                       "../../data/2/camera" + std::to_string(i_cam) + "_RGB.png",
-                                       "../../data/2/camera" + std::to_string(i_cam) + "_Depth.png");
+            auto pc = open3d::geometry::PointCloud::CreateFromRGBDImage(*rgbds.at(i_cam), cam_models.at(i_cam)->intrinsic, cam_models.at(i_cam)->extrinsic);
+            if (flag_output_debug) std::cout << "point cloud remains " << pc->points_.size() << " / " << rgbds.at(i_cam)->color_.width_ * rgbds.at(i_cam)->color_.height_ << " pixels = " << 100.0 * (float) pc->points_.size() / (float) (rgbds.at(i_cam)->color_.width_ * rgbds.at(i_cam)->color_.height_) << " % " << std::endl;
             *pc_combined += *pc;
-            if (flag_vis_debug) open3d::visualization::DrawGeometries({mesh_frame, mesh_bound, pc});
         }
-        if (flag_vis_debug) open3d::visualization::DrawGeometries({mesh_frame, mesh_bound, pc_combined});
-
         float dur_build_point_cloud = (float) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - time_start).count();
-        if (flag_output_debug) std::cout << "Point cloud built in " << dur_build_point_cloud << " milliseconds" << std::endl;
         cost_avg_build_pc += dur_build_point_cloud / (float) nLoop;
 
-        // mesh from c_arm CAD model
-        auto mesh_c_arm = std::make_shared<open3d::geometry::TriangleMesh> ();
-        open3d::io::ReadTriangleMeshFromPLY(file_path_c_arm_cad_model, *mesh_c_arm);
+        if (flag_output_debug) std::cout << "Point cloud built in " << dur_build_point_cloud << " milliseconds" << std::endl;
+        if (flag_vis_debug) open3d::visualization::DrawGeometries({mesh_frame, bbox_c_arm_workspace, pc_combined});
 
-        /*
-         * voxel
-         */
+        /// voxel
         time_start = std::chrono::high_resolution_clock::now();
-
-        /// build voxel from point cloud
-        /// TODO: CreateFromPointCloudWithinBounds doesn't filter point side bound
-        auto voxel_room = open3d::geometry::VoxelGrid::CreateFromPointCloudWithinBounds(*pc_combined->Crop(*mesh_bound), voxel_size, *xyz_min, *xyz_max);
-//        auto voxel_room = open3d::geometry::VoxelGrid::CreateFromPointCloudWithinBounds(*pc_combined, voxel_size, *xyz_min, *xyz_max);
-
-        if (flag_vis_debug) open3d::visualization::DrawGeometries({mesh_frame, mesh_bound, voxel_room});
-
+        // build voxel from point cloud
+        // TODO: CreateFromPointCloudWithinBounds doesn't filter point side bound
+//        auto voxel_room = open3d::geometry::VoxelGrid::CreateFromPointCloudWithinBounds(*pc_combined, voxel_size, *xyz_min_c_arm_workspace, *xyz_max_c_arm_workspace);
+        // TODO: Point Crop has no inplace change function
+        auto voxel_room = open3d::geometry::VoxelGrid::CreateFromPointCloud(*pc_combined->Crop(*bbox_c_arm_workspace), voxel_size);
         auto dur_build_voxel_grid = (float) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - time_start).count();
-        if (flag_output_debug) std::cout << "Voxel built in " << dur_build_voxel_grid << " milliseconds" << std::endl;
         cost_avg_build_voxel += dur_build_voxel_grid / (float) nLoop;
 
-        auto voxel_c_arm_model = open3d::geometry::VoxelGrid::CreateFromTriangleMesh(*mesh_c_arm, voxel_size);
+        if (flag_vis_debug) open3d::visualization::DrawGeometries({mesh_frame, bbox_c_arm_workspace, voxel_room});
+        if (flag_output_debug) std::cout << "Voxel built in " << dur_build_voxel_grid << " milliseconds" << std::endl;
 
         /// collision detection
+//        auto voxel_c_arm_trajectory = std::make_shared<open3d::geometry::VoxelGrid> ();
+        for (int i_c_arm_pose = 0; i_c_arm_pose < 10; i_c_arm_pose++) {     // rendering voxel as a_arm motion planned
+            voxel_c_arm->Transform(c_arm_motions.at(i_c_arm_pose)->matrix());
+//            *voxel_c_arm_trajectory += *voxel_c_arm;
+        }
+
+        if (flag_vis_debug) open3d::visualization::DrawGeometries({mesh_frame, bbox_c_arm_workspace, voxel_room, voxel_c_arm});
 
     }
 
     std::cout << "Point cloud built in " << cost_avg_build_pc << " milliseconds" << std::endl;
     std::cout << "Voxel built in " << cost_avg_build_voxel << " milliseconds" << std::endl;
+
     return 0;
+}
+
+std::shared_ptr<open3d::geometry::RGBDImage> ReadRGBD(const std::string& file_path_cam_setting,
+                                                      const std::string& file_path_rgb_img,
+                                                      const std::string& file_path_depth_img) {
+    open3d::geometry::Image img_rgb, img_depth;
+
+    // image reading
+    open3d::io::ReadImage(file_path_rgb_img, img_rgb);
+    open3d::io::ReadImage(file_path_depth_img, img_depth);
+    auto img_rgbd = open3d::geometry::RGBDImage::CreateFromColorAndDepth(img_rgb, img_depth, 1, 12000);
+    return img_rgbd;
+}
+
+std::vector<std::shared_ptr<Eigen::Transform<double, 3, 0x1>>> ReadTfFromFile(const std::string& file_path_motion) {
+    std::vector<std::shared_ptr<Eigen::Transform<double, 3, 0x1>>> tfs;
+    float step_t = 100, step_r = 18;
+    for (int i_pose = 0; i_pose < 20; i_pose++) {
+        auto tf = std::make_shared<Eigen::Transform<float, 3, 0x1>>();
+        Eigen::Matrix3f rotation;
+        tf->translate(Eigen::Vector3f((float) i_pose*step_t, (float) i_pose*step_t, 0));
+        rotation = Eigen::AngleAxisf ((float) i_pose*step_r, Eigen::Vector3f::UnitZ())
+                * Eigen::AngleAxisf ((float) i_pose*step_r, Eigen::Vector3f::UnitY())
+                * Eigen::AngleAxisf ((float) i_pose*step_r, Eigen::Vector3f::UnitX());
+        tf->rotate(rotation);
+    }
+    return tfs;
 }

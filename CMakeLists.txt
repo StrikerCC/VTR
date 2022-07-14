@@ -58,7 +58,7 @@ if (Open3D_FOUND)
     message(STATUS "Open3D installed to: ${Open3D_LIBRARY_DIRS}")
 endif()
 
-add_executable(VTR main.cpp)
+add_executable(VTR main.cpp src/Cam.cpp include/Cam.h)
 
 ##################################### output bin #####################################
 # SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR})
