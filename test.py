@@ -8,6 +8,27 @@ import json
 from slam_lib.camera.cam import PinHoleCamera
 
 
+def preprocess_c_arm(pc_c_arm):
+    frame = o3.geometry.TriangleMesh().create_coordinate_frame(size=1000)
+
+    tf_c_arm_self = np.eye(4)
+    tf_c_arm_self[:3, :3] = np.asarray([[0, 0, 1], [1, 0, 0], [0, 1, 0]])
+    tf_c_arm_self[:3, -1] = [-2050, -500, -1000]
+    pc_c_arm.transform(tf_c_arm_self)
+    o3.visualization.draw_geometries([pc_c_arm, frame])
+
+    tf_c_arm_wrold = np.eye(4)
+    tf_c_arm_wrold[:3, :3] = np.asarray([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    tf_c_arm_wrold[:3, -1] = [1689, 100, 850]
+    pc_c_arm.transform(tf_c_arm_wrold)
+    o3.visualization.draw_geometries([pc_c_arm, frame])
+
+
+def preprocess_cam_view(pc_cam):
+    frame = o3.geometry.TriangleMesh().create_coordinate_frame(size=1000, origin=())
+    o3.visualization.draw_geometries([pc_cam, frame])
+
+
 def vtr(cams, imgs_rgbd, pc_c_arm):
     vis_flag = True
 
@@ -52,16 +73,16 @@ def vtr(cams, imgs_rgbd, pc_c_arm):
 def get_data():
     vis_flag = True
 
-    file_paths_cam, file_paths_rgb, file_paths_depth = ['./test_img/2/cam_para_0.json',
-                                                        './test_img/2/cam_para_1.json',
-                                                        './test_img/2/cam_para_2.json'], \
-                                                       ['./test_img/2/camera0_RGB.png',
-                                                        './test_img/2/camera1_RGB.png',
-                                                        './test_img/2/camera2_RGB.png'], \
-                                                       ['./test_img/2/camera0_Depth.png',
-                                                        './test_img/2/camera1_Depth.png',
-                                                        './test_img/2/camera2_Depth.png']
-    file_paths_c_arm_model = './c_arm_model/vertical.ply'
+    file_paths_cam, file_paths_rgb, file_paths_depth = ['./data/2/cam_para_0.json',
+                                                        './data/2/cam_para_1.json',
+                                                        './data/2/cam_para_2.json'], \
+                                                       ['./data/2/camera0_RGB.png',
+                                                        './data/2/camera1_RGB.png',
+                                                        './data/2/camera2_RGB.png'], \
+                                                       ['./data/2/camera0_Depth.png',
+                                                        './data/2/camera1_Depth.png',
+                                                        './data/2/camera2_Depth.png']
+    file_paths_c_arm_model = './data/model/c_arm_model/vertical.ply'
 
     cams = []
     for file_path_cam in file_paths_cam:
@@ -122,8 +143,9 @@ def remove_overlapping(voxel_tgt, voxel_src, dilating_voxel_size):
 
 
 def main():
-    # cams, imgs_rgbd, pc_c_arm = get_data()
+    cams, imgs_rgbd, pc_c_arm = get_data()
     # vtr(cams, imgs_rgbd, pc_c_arm)
+    preprocess_c_arm(pc_c_arm)
 
     # TODO: implement voxel overlapping removing
     remove_overlapping(None, None, None)
